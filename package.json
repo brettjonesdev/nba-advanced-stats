@@ -1,0 +1,27 @@
+{
+    "name": "nba-advanced-stats",
+    "title": "NBA Advanced Stats",
+    "version": "0.0.1",
+    "author": "Brett Jones",
+    "homepage": "http://brettjonesdev.com",
+    "scripts": {
+        "start": "node start.js"
+    },
+    "dependencies": {
+        "nba": "~0.2.0",
+        "underscore": "1.7.0",
+        "handlebars": "2.0.0",
+        "moment": "2.8.4",
+        "accounting": "0.4.1"
+    },
+    "engines": {
+        "node": "0.10.x"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/brettjonesdev/nba-advanced-stats"
+    },
+    "keywords": [
+        "node"
+    ]
+}
