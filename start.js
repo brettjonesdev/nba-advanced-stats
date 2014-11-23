@@ -4,9 +4,13 @@ var _ = require('underscore');
 var Handlebars = require('handlebars');
 var moment = require('moment');
 var mkdirp = require('mkdirp');
+var Promise = require( "es6-promise" ).Promise;
 require('./helpers');
 
 var GAME_STATUS_FINAL = 3;
+
+var LEAGUE_AVERAGE_ORR = .25016666666666662;
+var LEAGUE_AVERAGE_DRR = .7494666666666669;
 
 nba.ready(function() {
     var argLength = process.argv.length;
@@ -26,15 +30,21 @@ nba.ready(function() {
     global.team = team;
 
     var date = argLength > 3 ? moment(process.argv[3]).toDate() : new Date();
-
     getLastGameForTeam(team.teamId, date, function(game) {
+        var options = {gameId: game.gameId};
+        Promise.all([nba.api.boxScoreFourFactors(options), nba.api.boxScoreScoring(options), nba.api.boxScoreAdvanced(options), nba.api.boxScoreUsage(options)])
+            .then(function(results){ //fourFactors, teamStats, boxScoreAdvanced, boxScoreUsage) {
+                var fourFactors = results[0];
+                var boxScoreScoring = results[1];
+                var boxScoreAdvanced = results[2];
+                var boxScoreUsage = results[3];
 
-        nba.api.boxScoreFourFactors({gameId: game.gameId})
-            .then(outputFourFactors);
-
-
+                outputFourFactors(fourFactors);
+                outputTeamStats(fourFactors);
+            });
     });
 });
+
 
 function getLastGameForTeam(teamId, date, callback) {
     if (!date) {
@@ -53,25 +63,70 @@ function getLastGameForTeam(teamId, date, callback) {
             callback(teamGame);
         }
     });
-
 }
 
 
 function outputFourFactors(resp) {
-    var template = Handlebars.compile(fs.readFileSync('./templates/fourFactors.hbs', "utf8"));
+    var template = getTemplate('fourFactors');
     var fourFactors = resp.sqlTeamsFourFactors;
 
     console.log("our team", global.team);
-    var ourTeam = _.findWhere(fourFactors, {teamId: global.team.teamId});
-    var theirTeam = _.without(fourFactors, ourTeam)[0];
-    var data = ourTeam;
-    data.opponentName = theirTeam.teamName;
+    var teams = getTeamsObj(fourFactors);
+    var data = teams.us;
+    data.opponentName = teams.them.teamName;
     console.log(data);
     var html = template(data);
     console.log("html", html);
     mkdirp(getDirectoryName(), function(err) {
         fs.writeFile(getDirectoryName() + 'fourFactors.html', html);
     });
+}
+
+function outputTeamStats(fourFactors) {
+    var teams = getTeamsObj(fourFactors.teamStats);
+    addAdvancedStats(teams.us, teams.them);
+    addAdvancedStats(teams.them, teams.us);
+    var template = getTemplate('teamStats');
+
+    var html = template(teams);
+    mkdirp(getDirectoryName(), function(err) {
+        fs.writeFile(getDirectoryName() + 'teamStats.html', html);
+    });
+}
+
+function getTemplate(name) {
+    return Handlebars.compile(fs.readFileSync('./templates/' + name + '.hbs', "utf8"));
+}
+
+function addAdvancedStats(team, opp) {
+    team.fG2A = team.fGA - team.fG3A;
+    team.fG2M = team.fGM - team.fG3M;
+    team.fg2Pct = team.fG2M / team.fG2A;
+
+    team.tSA = team.fGA + 0.44 * team.fTA;
+    team.tSPct = team.pTS / (2 * team.tSA);
+
+
+    //TODO possessions: see http://www.basketball-reference.com/about/glossary.html "Poss" - formula is rather complicated it would seem.
+
+    team.possessions = 0.5 * (getTeamPossessions(team, opp) + getTeamPossessions(opp, team));
+    team.pPP = (team.pTS) / team.possessions;
+    team.pPS = (team.pTS) / (team.fGA);
+    team.bCI = (team.aST + team.sTL) / team.tO;
+
+    team.oRR = team.oREB / (team.oREB + opp.dREB);
+    team.expectedOREB = LEAGUE_AVERAGE_ORR * (team.oREB + opp.dREB);
+    team.oREBDiff = team.oREB - team.expectedOREB;
+}
+
+function getTeamPossessions(team, opp) {
+    return (team.fGA + 0.4 * team.fTA - 1.07 * (team.oREB / (team.oREB + opp.dREB)) * (team.fGA - team.fGM) + team.tO);
+}
+
+function getTeamsObj(array) {
+    var ourTeam = _.findWhere(array, {teamId: global.team.teamId});
+    var theirTeam = _.without(array, ourTeam)[0];
+    return {us: ourTeam, them: theirTeam};
 }
 
 function getDirectoryName() {
