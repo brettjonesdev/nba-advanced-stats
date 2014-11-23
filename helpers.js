@@ -18,3 +18,18 @@ Handlebars.registerHelper('formatPercent', function(val, precision) {
     }
     return formatNumber(val, precision) + '%';
 });
+
+Handlebars.registerHelper('formatMinutes', function(val, includeSeconds) {
+    if (_.isString(val) ) {
+        var array = val.split(":");
+        if ( array && array.length == 2 ) {
+            var minutes = array[0];
+            var seconds = array[1];
+            if (includeSeconds === true) {
+                return val;
+            } else {
+                return minutes;
+            }
+        }
+    }
+});

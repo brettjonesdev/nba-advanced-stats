@@ -12,6 +12,10 @@ var GAME_STATUS_FINAL = 3;
 var LEAGUE_AVERAGE_ORR = .25016666666666662;
 var LEAGUE_AVERAGE_DRR = .7494666666666669;
 
+process.on('uncaughtException', function (error) {
+    console.log(error);
+});
+
 nba.ready(function() {
     var argLength = process.argv.length;
     if (argLength < 3 ) {
@@ -39,8 +43,10 @@ nba.ready(function() {
                 var boxScoreAdvanced = results[2];
                 var boxScoreUsage = results[3];
 
+                var teams = getTeamsObj(fourFactors.teamStats);
                 outputFourFactors(fourFactors);
-                outputTeamStats(fourFactors);
+                outputTeamStats(teams);
+                outputPlayers(fourFactors.playerStats, teams.us);
             });
     });
 });
@@ -70,20 +76,16 @@ function outputFourFactors(resp) {
     var template = getTemplate('fourFactors');
     var fourFactors = resp.sqlTeamsFourFactors;
 
-    console.log("our team", global.team);
     var teams = getTeamsObj(fourFactors);
     var data = teams.us;
     data.opponentName = teams.them.teamName;
-    console.log(data);
     var html = template(data);
-    console.log("html", html);
     mkdirp(getDirectoryName(), function(err) {
         fs.writeFile(getDirectoryName() + 'fourFactors.html', html);
     });
 }
 
-function outputTeamStats(fourFactors) {
-    var teams = getTeamsObj(fourFactors.teamStats);
+function outputTeamStats(teams) {
     addAdvancedStats(teams.us, teams.them);
     addAdvancedStats(teams.them, teams.us);
     var template = getTemplate('teamStats');
@@ -93,6 +95,45 @@ function outputTeamStats(fourFactors) {
         fs.writeFile(getDirectoryName() + 'teamStats.html', html);
     });
 }
+
+function outputPlayers(players, team) {
+    players = _.where(players, {teamId: global.team.teamId});
+    _.each(players, function(player){
+        player.REB = player.oREB + player.dREB;
+        var min = player.mIN;
+        if (_.isString(min) && min.length > 0 ) {
+            var array = min.split(':');
+            if ( array && array.length == 2) {
+                player.minutes = parseInt(array[0],10) + parseInt(array[1],10) / 60;
+            }
+        }
+    });
+    _.each(players, addGameScore);
+    //calculate adjusted game score to redistribute points actually scored
+    var totalGameScore = _.reduce(players, function(memo, player) {
+        return _.isNumber(player.gS) ? memo + player.gS : memo;
+    }, 0);
+    var count = 1;
+    _.each(players, function(player) {
+        count++;
+        player.isOdd = count % 2 == 1;
+
+        player.adjGS = (player.gS / totalGameScore) * team.pTS;
+        player.adjGSMin = player.minutes > 0 ? player.adjGS / player.minutes : 0;
+    });
+
+    var template = getTemplate('players');
+
+    var html = template({players: players});
+    mkdirp(getDirectoryName(), function(err) {
+        fs.writeFile(getDirectoryName() + 'players.html', html);
+    });
+}
+
+function addGameScore(player) {
+    player.gS = player.pTS + 0.4 * player.fGM - 0.7 * player.fGA - 0.4*(player.fTA - player.fTM) + 0.7 * player.oREB + 0.3 * player.dREB + player.sTL + 0.7 * player.aST + 0.7 * player.bLK - 0.4 * player.pF - player.tO;
+}
+
 
 function getTemplate(name) {
     return Handlebars.compile(fs.readFileSync('./templates/' + name + '.hbs', "utf8"));
