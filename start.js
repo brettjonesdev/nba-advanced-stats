@@ -113,17 +113,19 @@ function outputPlayers(players, team) {
     var totalGameScore = _.reduce(players, function(memo, player) {
         return _.isNumber(player.gS) ? memo + player.gS : memo;
     }, 0);
-    var count = 1;
     _.each(players, function(player) {
-        count++;
-        player.isOdd = count % 2 == 1;
-
         player.adjGS = (player.gS / totalGameScore) * team.pTS;
         player.adjGSMin = player.minutes > 0 ? player.adjGS / player.minutes : 0;
     });
 
-    var template = getTemplate('players');
+    players = _.sortBy(players, function(player){return -player.gS});
+    var count = 1;
+    _.each(players, function(player) {
+        count++;
+        player.isOdd = count % 2 == 1;
+    });
 
+    var template = getTemplate('players');
     var html = template({players: players});
     mkdirp(getDirectoryName(), function(err) {
         fs.writeFile(getDirectoryName() + 'players.html', html);
