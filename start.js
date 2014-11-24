@@ -44,8 +44,10 @@ nba.ready(function() {
                 var boxScoreUsage = results[3];
 
                 var teams = getTeamsObj(fourFactors.teamStats);
+                var playerTrackTeams = getTeamsObj(boxScoreUsage.playerTrackTeam);
+
                 outputFourFactors(fourFactors);
-                outputTeamStats(teams);
+                outputTeamStats(teams, playerTrackTeams);
                 outputPlayers(fourFactors.playerStats, teams.us);
             });
     });
@@ -85,10 +87,13 @@ function outputFourFactors(resp) {
     });
 }
 
-function outputTeamStats(teams) {
+function outputTeamStats(teams, playerTrackTeam) {
+    teams.us = _.defaults(teams.us, playerTrackTeam.us);
+    teams.them = _.defaults(teams.them, playerTrackTeam.them);
     addAdvancedStats(teams.us, teams.them);
     addAdvancedStats(teams.them, teams.us);
     var template = getTemplate('teamStats');
+
 
     var html = template(teams);
     mkdirp(getDirectoryName(), function(err) {
@@ -160,6 +165,11 @@ function addAdvancedStats(team, opp) {
     team.oRR = team.oREB / (team.oREB + opp.dREB);
     team.expectedOREB = LEAGUE_AVERAGE_ORR * (team.oREB + opp.dREB);
     team.oREBDiff = team.oREB - team.expectedOREB;
+
+    team.percentOfFGAUncontested = team.uFGA / team.fGA;
+    team.percentOfFGAContested = team.cFGA / team.fGA;
+    team.uFGPct = team.uFGM / team.uFGA;
+    team.cFGPct = team.cFGM / team.cFGA;
 }
 
 function getTeamPossessions(team, opp) {
